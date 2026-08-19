@@ -13,11 +13,7 @@ env:
   REGISTRY: us-central1-docker.pkg.dev
   REPO: quasar-sage
   SERVICE: quasar-sage-gateway
-  # TODO (one-time GCP setup, see README.md "Deploy" section): create a
-  # Workload Identity Federation pool + provider for this GitHub repo and
-  # a deploy service account, mirroring Lorito's colibri-github-pool /
-  # colibri-github-actions setup. Fill in both values below once created.
-  WIF_PROVIDER: projects/REPLACE_ME/locations/global/workloadIdentityPools/quasar-sage-github-pool/providers/quasar-sage-github-provider
+  WIF_PROVIDER: projects/250103471198/locations/global/workloadIdentityPools/quasar-sage-github-pool/providers/quasar-sage-github-provider
   WIF_SA: quasar-sage-github-actions@quasar-business-sage.iam.gserviceaccount.com
 
 jobs:

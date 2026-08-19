@@ -12,6 +12,13 @@ shape, deterministic "not yet enabled" response, no generation. See
 `C:\Users\totob\.claude\plans\synthetic-dazzling-piglet.md` for the full
 sprint plan and everything explicitly deferred past launch.
 
+**Live:** `https://quasar-sage-gateway-lnexpzgv5a-uc.a.run.app` (GCP
+project `quasar-business-sage`, deployed via `.github/workflows/deploy.yml`
+on every push to `main`). Verified end-to-end with real Claude output for
+both live modules via `scripts/smoke_test.ps1` -- see git history for two
+real bugs that only showed up in production (a trailing-newline secret and
+a gunicorn worker timeout, both fixed).
+
 ## Gateway (`gateway/`)
 
 FastAPI service implementing spec Section 3 (API Gateway & Parsing Rules):

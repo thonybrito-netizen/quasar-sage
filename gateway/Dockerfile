@@ -10,4 +10,4 @@ COPY app ./app
 ENV PORT=8080
 EXPOSE 8080
 
-CMD ["sh", "-c", "gunicorn app.main:app --workers 2 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT}"]
+CMD ["sh", "-c", "gunicorn app.main:app --workers 2 --worker-class uvicorn.workers.UvicornWorker --timeout 90 --bind 0.0.0.0:${PORT}"]

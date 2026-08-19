@@ -1,0 +1,84 @@
+name: Deploy Gateway to GCP Cloud Run
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "gateway/**"
+      - ".github/workflows/deploy.yml"
+
+env:
+  PROJECT_ID: quasar-business-sage
+  REGION: us-central1
+  REGISTRY: us-central1-docker.pkg.dev
+  REPO: quasar-sage
+  SERVICE: quasar-sage-gateway
+  # TODO (one-time GCP setup, see README.md "Deploy" section): create a
+  # Workload Identity Federation pool + provider for this GitHub repo and
+  # a deploy service account, mirroring Lorito's colibri-github-pool /
+  # colibri-github-actions setup. Fill in both values below once created.
+  WIF_PROVIDER: projects/REPLACE_ME/locations/global/workloadIdentityPools/quasar-sage-github-pool/providers/quasar-sage-github-provider
+  WIF_SA: quasar-sage-github-actions@quasar-business-sage.iam.gserviceaccount.com
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write # required for Workload Identity Federation
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.WIF_SA }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGISTRY }} --quiet
+
+      - name: Build Gateway image
+        run: |
+          docker build \
+            -t ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/gateway:${{ github.sha }} \
+            -t ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/gateway:latest \
+            gateway
+
+      - name: Push Gateway image
+        run: |
+          docker push ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/gateway:${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/gateway:latest
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE }} \
+            --image=${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/gateway:${{ github.sha }} \
+            --region=${{ env.REGION }} \
+            --platform=managed \
+            --no-allow-unauthenticated \
+            --port=8080 \
+            --min-instances=0 \
+            --max-instances=10 \
+            --memory=512Mi \
+            --set-env-vars="CHAT_MODEL_ID=claude-sonnet-5,CORS_ALLOW_ORIGINS=*" \
+            --set-secrets="ANTHROPIC_API_KEY=anthropic-api-key:latest,TENANT_API_KEYS=quasar-sage-tenant-keys:latest"
+
+      # QuietNoise and Lorito call this service directly with their own
+      # tenant bearer key (see core/security.py) -- not via IAM identity
+      # tokens, so --no-allow-unauthenticated above is about the Cloud Run
+      # ingress layer, not app-level auth. If IAM-level access also needs
+      # restricting to specific callers, grant roles/run.invoker to their
+      # service accounts here instead of allUsers.
+      - name: Get Gateway URL
+        run: |
+          gcloud run services describe ${{ env.SERVICE }} \
+            --region=${{ env.REGION }} \
+            --format="value(status.url)"

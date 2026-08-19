@@ -44,3 +44,31 @@ real key works once you drop it into `.env` is to re-run this script.
 
 The embeddable Sage UI, mounted into both QuietNoise and Lorito. See
 `widget/README.md` for the integration contract both apps follow.
+
+## Deploy (`gateway/`, GCP project `quasar-business-sage`)
+
+`.github/workflows/deploy.yml` builds and deploys the Gateway to Cloud Run
+on every push to `main` that touches `gateway/`, mirroring Lorito's own
+WIF-based deploy.yml. One-time GCP setup needed before the first run
+(none of this is scripted -- do it once in the Cloud Console / gcloud):
+
+1. **Artifact Registry repo**: `gcloud artifacts repositories create quasar-sage --repository-format=docker --location=us-central1`
+2. **Workload Identity Federation**: a pool + provider trusting this GitHub
+   repo, and a deploy service account with `roles/run.admin` +
+   `roles/artifactregistry.writer` + `roles/iam.serviceAccountUser` --
+   same shape as Lorito's `colibri-github-pool` setup. Fill the resulting
+   provider path and service account email into `WIF_PROVIDER`/`WIF_SA` at
+   the top of `deploy.yml`.
+3. **Secrets** (Secret Manager): `anthropic-api-key` (the real key from
+   `gateway/.env`, never commit it) and `quasar-sage-tenant-keys` (the
+   real JSON tenant-key map -- generate fresh random keys for prod, don't
+   reuse the `qn-dev-placeholder`/`col-dev-placeholder` dev values). Once
+   the real prod tenant keys exist, update `SAGE_API_KEY` in QuietNoise's
+   `apphosting.yaml` secret and `QUASAR_SAGE_API_KEY` in Lorito's
+   `deploy.yml` secret to match.
+4. **Vertex fallback (optional)**: if you'd rather not hold a raw
+   Anthropic API key in Secret Manager long-term, `VERTEX_PROJECT_ID` is
+   the fallback path (see `gateway/app/clients/anthropic_client.py`) --
+   but note the executive-coach project's prior finding: Vertex's default
+   quota for Anthropic models is 0 on a fresh project and needs a manual
+   Google-side approval, so don't plan the launch around switching to it.

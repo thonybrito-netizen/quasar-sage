@@ -14,6 +14,20 @@ claim to the context_field key it was sourced from
 }
 """
 
+_LANGUAGE_NAMES = {"en": "English", "es": "Spanish", "pt": "Portuguese"}
+
+
+def _language_instruction(language: str) -> str:
+    name = _LANGUAGE_NAMES.get(language, language)
+    return (
+        f"Write in {name}: the strategic_critique text, generated_content, "
+        f"every missing_variables entry, and suggested_next_action must all "
+        f"be in {name}. The JSON keys themselves (missing_variables, "
+        f"strategic_critique, etc.) are a fixed machine contract and stay "
+        f"in English exactly as shown above -- only the string values you "
+        f"write into them change language."
+    )
+
 
 def assemble_prompt(module: Module, request: CompletionRequest) -> tuple[str, str]:
     """Section 3.1.1's three-block Modular Assembly Process: Core Identity
@@ -26,7 +40,14 @@ def assemble_prompt(module: Module, request: CompletionRequest) -> tuple[str, st
 
     Returns (system_prompt, user_content).
     """
-    system_prompt = "\n\n".join([CORE_IDENTITY, module.system_prompt(request), RESPONSE_SCHEMA_INSTRUCTIONS])
+    system_prompt = "\n\n".join(
+        [
+            CORE_IDENTITY,
+            module.system_prompt(request),
+            RESPONSE_SCHEMA_INSTRUCTIONS,
+            _language_instruction(request.language),
+        ]
+    )
     user_content = "\n\n".join(
         [render_context_block(request.context), f"<user_message>\n{request.user_message}\n</user_message>"]
     )

@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import type { DealmakerMode, ModuleId, SageCompletionResponse } from "./types";
+import type { DealmakerMode, ModuleId, SageCompletionResponse, SageLanguage } from "./types";
 
 interface UseSageCompletionOptions {
   /** Same-origin proxy path in the host app, e.g. "/api/sage/completions"
@@ -12,6 +12,7 @@ interface UseSageCompletionOptions {
 interface RunArgs {
   module: ModuleId;
   mode?: DealmakerMode | null;
+  language?: SageLanguage;
   userMessage: string;
   context: Record<string, unknown>;
 }
@@ -22,14 +23,20 @@ export function useSageCompletion({ endpoint }: UseSageCompletionOptions) {
   const [result, setResult] = useState<SageCompletionResponse | null>(null);
 
   const run = useCallback(
-    async ({ module, mode, userMessage, context }: RunArgs) => {
+    async ({ module, mode, language, userMessage, context }: RunArgs) => {
       setLoading(true);
       setError(null);
       try {
         const response = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ module, mode: mode ?? null, user_message: userMessage, context }),
+          body: JSON.stringify({
+            module,
+            mode: mode ?? null,
+            language: language ?? "en",
+            user_message: userMessage,
+            context,
+          }),
         });
         if (!response.ok) {
           throw new Error(`Sage request failed (${response.status})`);

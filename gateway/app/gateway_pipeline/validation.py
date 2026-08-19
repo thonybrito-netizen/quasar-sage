@@ -67,7 +67,15 @@ def _grounding_check(data: dict, request: CompletionRequest) -> None:
 def _framework_logic_check(data: dict) -> None:
     """Simplified vs. spec Section 3.3.2: a keyword heuristic, not a
     trained semantic classifier. Flags content that leans on vanity-metric
-    language with no outcome framing anywhere in the same response."""
+    language with no outcome framing anywhere in the same response.
+
+    Known gap: _VANITY_TERMS/_OUTCOME_TERMS are English-only, so for a
+    non-English `language` (Section 3.1's request field) this check simply
+    never fires either way rather than misfiring -- a silent no-op, not a
+    false positive/negative. Fine for launch since Grounding Check and
+    Type Validation still run regardless of language; worth localizing the
+    term lists (or replacing this with the spec's actual semantic
+    classifier) before leaning on this check for non-English traffic."""
     combined = f"{data['generated_content']} {data['strategic_critique']}".lower()
     has_vanity_term = any(term in combined for term in _VANITY_TERMS)
     has_outcome_term = any(term in combined for term in _OUTCOME_TERMS)

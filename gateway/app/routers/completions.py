@@ -18,6 +18,7 @@ async def create_completion(
         tenant_id=tenant_id,
         module=payload.module,
         mode=payload.mode,
+        language=payload.language,
         user_message=payload.user_message,
         context=payload.context,
     )

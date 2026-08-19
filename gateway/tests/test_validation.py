@@ -60,7 +60,12 @@ def test_grounding_check_rejects_unsourced_claim_then_recovers(fake_claude):
 
 
 def test_graceful_fallback_when_no_model_backend_configured(monkeypatch, env_setup):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    # Explicitly empty, not delenv: an OS env var (even "") outranks the
+    # .env file in pydantic-settings' source precedence, but merely
+    # deleting the OS var lets it fall through to gateway/.env's real key
+    # (present there for manual local testing) -- which would make this a
+    # real, slow API call instead of testing the "not configured" path.
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "")
     from app.core.config import get_settings
 
     get_settings.cache_clear()

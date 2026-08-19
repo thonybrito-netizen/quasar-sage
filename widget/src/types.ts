@@ -1,10 +1,13 @@
 export type ModuleId = "visionary" | "storyteller" | "dealmaker" | "negotiator" | "locker_room";
 export type DealmakerMode = "enterprise" | "retail";
+/** Driven by the host app's own current UI language, not a separate widget setting. */
+export type SageLanguage = "en" | "es" | "pt";
 
 /** Mirrors gateway/app/schemas/context.py::ContextPayload */
 export interface SageCompletionRequestBody {
   module: ModuleId;
   mode?: DealmakerMode | null;
+  language?: SageLanguage;
   user_message: string;
   context: Record<string, unknown>;
 }

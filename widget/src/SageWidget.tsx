@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { MODULE_THEME, SAGE_BG, SAGE_BORDER, SAGE_SURFACE, SAGE_TEXT, SAGE_TEXT_MUTED } from "./theme";
 import { useSageCompletion } from "./useSageCompletion";
-import type { DealmakerMode, ModuleId } from "./types";
+import type { DealmakerMode, ModuleId, SageLanguage } from "./types";
 
 const MODULE_ORDER: ModuleId[] = ["visionary", "storyteller", "dealmaker", "negotiator", "locker_room"];
 
@@ -15,9 +15,18 @@ export interface SageWidgetProps {
    * fields. Supplied by the host app since only it knows its own data. */
   initialContext?: Record<string, unknown>;
   dealmakerMode?: DealmakerMode;
+  /** Driven by the host app's own current UI language -- see
+   * gateway/app/schemas/context.py::ContextPayload for why this isn't a
+   * separate in-widget setting. */
+  language?: SageLanguage;
 }
 
-export function SageWidget({ endpoint, initialContext = {}, dealmakerMode = "enterprise" }: SageWidgetProps) {
+export function SageWidget({
+  endpoint,
+  initialContext = {},
+  dealmakerMode = "enterprise",
+  language = "en",
+}: SageWidgetProps) {
   const [open, setOpen] = useState(false);
   const [activeModule, setActiveModule] = useState<ModuleId>("visionary");
   const [userMessage, setUserMessage] = useState("");
@@ -31,6 +40,7 @@ export function SageWidget({ endpoint, initialContext = {}, dealmakerMode = "ent
       await run({
         module: activeModule,
         mode: activeModule === "dealmaker" ? dealmakerMode : null,
+        language,
         userMessage,
         context: initialContext,
       });

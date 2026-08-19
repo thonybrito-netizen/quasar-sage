@@ -1,0 +1,12 @@
+.env
+.env.local
+gateway/.venv/
+gateway/__pycache__/
+gateway/.pytest_cache/
+**/__pycache__/
+**/*.pyc
+
+node_modules/
+widget/dist/
+.DS_Store
+*.log

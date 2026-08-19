@@ -1,0 +1,10 @@
+{
+  "name": "@quasar/sage-widget",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Reference implementation of the Quasar Sage embeddable widget. Not published this sprint -- see README.md for how QuietNoise and Lorito integrate it.",
+  "main": "src/index.ts",
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0"
+  }
+}

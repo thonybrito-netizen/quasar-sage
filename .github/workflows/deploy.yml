@@ -53,13 +53,22 @@ jobs:
           docker push ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/gateway:${{ github.sha }}
           docker push ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/gateway:latest
 
+      # --allow-unauthenticated at the Cloud Run ingress layer, same as
+      # QuietNoise's own quietnoise-api service (cloudbuild.yaml): callers
+      # are external services (QuietNoise's Next.js server, Lorito's
+      # FastAPI backend) sending a plain `Authorization: Bearer <tenant
+      # key>` header, not a Google-signed ID token, so IAM-level auth
+      # would reject them before the request ever reached the app's own
+      # tenant-key check in core/security.py. Real auth is that app-level
+      # check; Cloud Run ingress is deliberately open, exactly like
+      # quietnoise-api.
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy ${{ env.SERVICE }} \
             --image=${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/gateway:${{ github.sha }} \
             --region=${{ env.REGION }} \
             --platform=managed \
-            --no-allow-unauthenticated \
+            --allow-unauthenticated \
             --port=8080 \
             --min-instances=0 \
             --max-instances=10 \
@@ -67,12 +76,6 @@ jobs:
             --set-env-vars="CHAT_MODEL_ID=claude-sonnet-5,CORS_ALLOW_ORIGINS=*" \
             --set-secrets="ANTHROPIC_API_KEY=anthropic-api-key:latest,TENANT_API_KEYS=quasar-sage-tenant-keys:latest"
 
-      # QuietNoise and Lorito call this service directly with their own
-      # tenant bearer key (see core/security.py) -- not via IAM identity
-      # tokens, so --no-allow-unauthenticated above is about the Cloud Run
-      # ingress layer, not app-level auth. If IAM-level access also needs
-      # restricting to specific callers, grant roles/run.invoker to their
-      # service accounts here instead of allUsers.
       - name: Get Gateway URL
         run: |
           gcloud run services describe ${{ env.SERVICE }} \

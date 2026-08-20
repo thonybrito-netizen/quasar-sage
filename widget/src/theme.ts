@@ -4,9 +4,9 @@ import type { ModuleId } from "./types";
 export const MODULE_THEME: Record<ModuleId, { label: string; color: string; live: boolean }> = {
   visionary: { label: "Visionary", color: "#22D3EE", live: true },
   storyteller: { label: "Storyteller", color: "#F59E0B", live: true },
-  dealmaker: { label: "Dealmaker", color: "#22C55E", live: false },
-  negotiator: { label: "Negotiator", color: "#8B5CF6", live: false },
-  locker_room: { label: "Locker Room", color: "#EF4444", live: false },
+  dealmaker: { label: "Dealmaker", color: "#22C55E", live: true },
+  negotiator: { label: "Negotiator", color: "#8B5CF6", live: true },
+  locker_room: { label: "Locker Room", color: "#EF4444", live: true },
 };
 
 export const SAGE_BG = "#0B1120"; // dark navy, spec Section 6.1

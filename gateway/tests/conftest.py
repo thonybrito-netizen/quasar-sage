@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from app import main as main_module
 from app.core.config import get_settings
 from app.gateway_pipeline import validation as validation_module
+from app.routers import outcomes as outcomes_module
 
 
 @dataclass
@@ -61,6 +62,22 @@ def fake_claude(monkeypatch, env_setup):
         return fake_client
 
     return _script
+
+
+@pytest.fixture
+def fake_outcome_store(monkeypatch, env_setup):
+    """Records calls instead of writing to real Firestore. Returns the
+    list of recorded calls so tests can assert on what would have been
+    written."""
+    calls: list[dict] = []
+
+    def _fake_write(tenant_id, module, mode, field_type, label):
+        calls.append(
+            {"tenant_id": tenant_id, "module": module, "mode": mode, "field_type": field_type, "label": label}
+        )
+
+    monkeypatch.setattr(outcomes_module, "write_outcome", _fake_write)
+    return calls
 
 
 @pytest.fixture

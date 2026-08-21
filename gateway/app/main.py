@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .core.config import get_settings
-from .routers import completions, health, modules
+from .routers import completions, health, modules, outcomes
 
 app = FastAPI(title="Quasar Sage Gateway", version="0.1.0")
 
@@ -18,3 +18,4 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(completions.router)
 app.include_router(modules.router)
+app.include_router(outcomes.router)

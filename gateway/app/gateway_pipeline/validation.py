@@ -1,4 +1,5 @@
 import json
+import re
 
 from ..clients.anthropic_client import get_client
 from ..core.config import get_settings
@@ -7,11 +8,60 @@ from ..schemas.context import CompletionRequest
 from ..schemas.envelope import CompletionResponse
 from .prompt_assembly import assemble_prompt
 
+# Backstop only now -- see _framework_logic_check. Kept because it's free
+# (no extra reasoning needed) and catches the rare case where the model's
+# own self-audit misses something.
 _VANITY_TERMS = {"likes", "impressions", "followers", "views", "shares", "engagement rate", "reach"}
 _OUTCOME_TERMS = {
     "revenue", "pipeline", "closed-won", "closed won", "orders", "leads", "roi",
     "conversion", "win rate", "deal value", "quota", "retention", "repeat purchase",
 }
+
+_NUMBER_RE = re.compile(r"-?\d[\d,]*\.?\d*\s*([kKmM])?")
+_NORMALIZE_RE = re.compile(r"[^a-z0-9.]+")
+
+
+def _extract_number(text: str) -> float | None:
+    """Pulls the first number out of `text`, expanding a trailing k/m
+    suffix (e.g. "850k" -> 850000.0, "$1.2M" -> 1200000.0)."""
+    match = _NUMBER_RE.search(text)
+    if not match or not match.group(0).strip():
+        return None
+    raw = match.group(0)
+    suffix = match.group(1)
+    digits = raw.rstrip("kKmM \t").replace(",", "").strip()
+    if not digits or digits == "-":
+        return None
+    try:
+        value = float(digits)
+    except ValueError:
+        return None
+    if suffix and suffix.lower() == "k":
+        value *= 1_000
+    elif suffix and suffix.lower() == "m":
+        value *= 1_000_000
+    return value
+
+
+def _values_correspond(claim: str, context_value: object) -> bool:
+    """Deterministic diff between a claim snippet and the context value
+    it's supposedly sourced from. Handles exact/substring text matches and
+    numeric matches that survive formatting differences ("$850k" in the
+    claim vs. 850000 in context, or "150,000" vs. 150000)."""
+    value_str = str(context_value)
+    claim_norm = _NORMALIZE_RE.sub("", claim.lower())
+    value_norm = _NORMALIZE_RE.sub("", value_str.lower())
+
+    if value_norm and (value_norm in claim_norm or claim_norm in value_norm):
+        return True
+
+    claim_num = _extract_number(claim)
+    value_num = _extract_number(value_str)
+    if claim_num is not None and value_num is not None:
+        tolerance = max(abs(value_num) * 0.01, 0.5)
+        return abs(claim_num - value_num) <= tolerance
+
+    return False
 
 
 class ValidationFailure(Exception):
@@ -48,13 +98,16 @@ def _type_validate(raw_text: str) -> dict:
 
 
 def _grounding_check(data: dict, request: CompletionRequest) -> None:
-    """Simplified vs. spec Section 3.3.2: verifies every sourced_fields key
-    names a field that actually exists in the hydrated context payload
-    (structural match), rather than running a full semantic diff between
-    the claim text and the field value."""
-    context_keys = set(request.context.keys())
+    """Section 3.3.2's diff-checker: for every (claim -> source_key) pair
+    in sourced_fields, the source field must both exist in the hydrated
+    context AND its actual value must correspond to the claim text (see
+    _values_correspond) -- not just a structural key-existence check. A
+    claim tagged as sourced from `deal_value` when the context's
+    deal_value is a different number fails exactly like an untagged
+    hallucination would."""
+    context = request.context
     for claim, source_key in data["sourced_fields"].items():
-        if source_key not in context_keys:
+        if source_key not in context:
             raise ValidationFailure(
                 "grounding_check",
                 f"sourced_fields claims '{claim}' came from context field "
@@ -62,20 +115,52 @@ def _grounding_check(data: dict, request: CompletionRequest) -> None:
                 "Only cite fields that are actually present, or move the claim "
                 "into missing_variables instead of asserting it.",
             )
+        if not _values_correspond(claim, context[source_key]):
+            raise ValidationFailure(
+                "grounding_check",
+                f"sourced_fields claims '{claim}' came from context field "
+                f"'{source_key}' (actual value: {context[source_key]!r}), but "
+                f"the claim text doesn't match that value. Cite the real value "
+                f"exactly, or move the claim into missing_variables instead of "
+                f"asserting it.",
+            )
 
 
 def _framework_logic_check(data: dict) -> None:
-    """Simplified vs. spec Section 3.3.2: a keyword heuristic, not a
-    trained semantic classifier. Flags content that leans on vanity-metric
-    language with no outcome framing anywhere in the same response.
+    """Section 3.3.2's semantic classifier, implemented as the model's own
+    structured self-audit rather than keyword regex or a separately
+    trained model: the response schema requires a `vanity_metric_audit`
+    field the model must fill in as part of the SAME generation call (see
+    RESPONSE_SCHEMA_INSTRUCTIONS), and this function is the Gateway's own
+    deterministic enforcement of that self-report -- the model doesn't get
+    to silently ignore its own audit, a failed audit forces an Invisible
+    Retry exactly like any other check. This is real semantic judgment
+    (the same reasoning pass that wrote the content evaluates it against
+    the vanity-vs-outcome distinction) without a second API round-trip or
+    a trained classifier, and it correctly handles both false-positive
+    cases from the old keyword approach ("the Plant Manager likes fast
+    turnaround") and false-negative ones (an impressions-obsessed strategy
+    that never uses the word "impressions").
 
-    Known gap: _VANITY_TERMS/_OUTCOME_TERMS are English-only, so for a
-    non-English `language` (Section 3.1's request field) this check simply
-    never fires either way rather than misfiring -- a silent no-op, not a
-    false positive/negative. Fine for launch since Grounding Check and
-    Type Validation still run regardless of language; worth localizing the
-    term lists (or replacing this with the spec's actual semantic
-    classifier) before leaning on this check for non-English traffic."""
+    _VANITY_TERMS/_OUTCOME_TERMS below now run only as a backstop when the
+    audit field is missing or malformed (e.g. a fake/legacy test fixture,
+    or a model response that skipped it) -- English-only, so for non-
+    English traffic without a valid audit field this backstop is a silent
+    no-op rather than a misfire. The primary path (the self-audit) has no
+    such language limitation since it's the model's own judgment in
+    whatever language it's already responding in."""
+    audit = data.get("vanity_metric_audit")
+    if isinstance(audit, dict) and isinstance(audit.get("leans_on_vanity_metrics"), bool):
+        if audit["leans_on_vanity_metrics"]:
+            reasoning = audit.get("reasoning", "no reasoning supplied")
+            raise ValidationFailure(
+                "framework_logic_check",
+                f"Your own vanity_metric_audit flagged this response: {reasoning} "
+                "Reframe around a measurable business outcome (revenue, pipeline, "
+                "orders, leads, retention) instead.",
+            )
+        return
+
     combined = f"{data['generated_content']} {data['strategic_critique']}".lower()
     has_vanity_term = any(term in combined for term in _VANITY_TERMS)
     has_outcome_term = any(term in combined for term in _OUTCOME_TERMS)
@@ -85,8 +170,9 @@ def _framework_logic_check(data: dict) -> None:
             "framework_logic_check",
             "Response leans on vanity-metric language (likes/impressions/"
             "followers/etc.) with no outcome framing (revenue/pipeline/leads/"
-            "orders/etc.) anywhere in the response. Reframe around a "
-            "measurable business outcome.",
+            "orders/etc.) anywhere in the response, and no vanity_metric_audit "
+            "field was supplied to judge it directly. Reframe around a "
+            "measurable business outcome and include the audit field.",
         )
 
 

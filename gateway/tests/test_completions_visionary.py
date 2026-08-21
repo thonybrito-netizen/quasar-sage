@@ -8,7 +8,8 @@ def test_visionary_happy_path(client, fake_claude):
             "strategic_critique": "Your draft leads with the edge-node spec sheet, not the belief behind it.",
             "generated_content": "We believe industrial edge networks should never experience unplanned downtime.",
             "suggested_next_action": "advance_to_storyteller",
-            "sourced_fields": {"industry": "industry"},
+            "sourced_fields": {"unplanned downtime": "enemy"},
+            "vanity_metric_audit": {"leans_on_vanity_metrics": False, "reasoning": "No metrics cited at all, positioning only."},
         }
     )
     fake_claude([good_response])

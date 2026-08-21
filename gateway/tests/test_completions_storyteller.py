@@ -8,7 +8,8 @@ def test_storyteller_happy_path(client, fake_claude):
             "strategic_critique": "Draft appeals to fear of obsolescence, not just cost savings.",
             "generated_content": "Your machines were offline for 14 hours last month. What did that cost the floor?",
             "suggested_next_action": "advance_to_locker_room",
-            "sourced_fields": {"downtime_hours": "downtime_hours"},
+            "sourced_fields": {"14 hours": "downtime_hours"},
+            "vanity_metric_audit": {"leans_on_vanity_metrics": False, "reasoning": "Cites downtime cost, an operational outcome, not a vanity metric."},
         }
     )
     fake_claude([good_response])
@@ -36,7 +37,8 @@ def test_dealmaker_enterprise_happy_path(client, fake_claude):
             "strategic_critique": "Economic Buyer confirmed, deal is healthy.",
             "generated_content": "Zero-latency decisions let the Plant Manager hit Q3 quotas.",
             "suggested_next_action": None,
-            "sourced_fields": {"economic buyer": "economic_buyer"},
+            "sourced_fields": {"VP Operations": "economic_buyer"},
+            "vanity_metric_audit": {"leans_on_vanity_metrics": False, "reasoning": "Frames the feature as a quota-hitting outcome for a named stakeholder."},
         }
     )
     fake_claude([good_response])
@@ -66,7 +68,8 @@ def test_dealmaker_retail_mode_selects_retail_prompt(client, fake_claude):
             "strategic_critique": "Countdown is backed by real inventory data.",
             "generated_content": "Only 4 left in stock -- order today.",
             "suggested_next_action": None,
-            "sourced_fields": {"stock count": "stock_remaining"},
+            "sourced_fields": {"4 left": "stock_remaining"},
+            "vanity_metric_audit": {"leans_on_vanity_metrics": False, "reasoning": "Real inventory-backed urgency, not a vanity metric at all."},
         }
     )
     fake_claude([good_response])
@@ -93,7 +96,8 @@ def test_negotiator_happy_path(client, fake_claude):
             "strategic_critique": "Walk-Away Ledger is defined, safe to proceed.",
             "generated_content": "How would a number like that work on your end?",
             "suggested_next_action": None,
-            "sourced_fields": {"batna": "walk_away_value"},
+            "sourced_fields": {"50000": "walk_away_value"},
+            "vanity_metric_audit": {"leans_on_vanity_metrics": False, "reasoning": "Negotiation coaching, no metrics of any kind cited."},
         }
     )
     fake_claude([good_response])
@@ -121,7 +125,8 @@ def test_locker_room_happy_path(client, fake_claude):
             "strategic_critique": "Kill Criteria defined: 20 new orders in 30 days. Window not elapsed, too early to call it.",
             "generated_content": "Campaign is launch-ready.",
             "suggested_next_action": None,
-            "sourced_fields": {"target": "kill_criteria_target"},
+            "sourced_fields": {"20 new orders in 30 days": "kill_criteria_target"},
+            "vanity_metric_audit": {"leans_on_vanity_metrics": False, "reasoning": "Judged strictly against the client's own order-count Kill Criteria."},
         }
     )
     fake_claude([good_response])

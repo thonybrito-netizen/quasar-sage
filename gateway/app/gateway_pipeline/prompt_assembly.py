@@ -9,9 +9,23 @@ else:
   "strategic_critique": string,
   "generated_content": string,
   "suggested_next_action": string | null,
-  "sourced_fields": { [claimKeyword: string]: string }  // maps a factual \
-claim to the context_field key it was sourced from
+  "sourced_fields": { [claimKeyword: string]: string },  // maps a factual \
+claim to the context_field key it was sourced from -- the claim text must \
+match the field's actual value (a diff-checker rejects mismatches)
+  "vanity_metric_audit": {
+    "leans_on_vanity_metrics": boolean,  // true only if generated_content \
+or strategic_critique treats likes/impressions/followers/reach/views as \
+evidence of success on their own, with no outcome framing (revenue, \
+pipeline, orders, leads, retention, conversion) anywhere in the response. \
+A mention of one of those words in a non-metric sense (e.g. "the Plant \
+Manager likes fast turnaround") is NOT a vanity-metric lean -- judge \
+intent, not literal word presence.
+    "reasoning": string  // one sentence justifying the boolean above
+  }
 }
+Self-audit honestly: this field is checked by code, not trusted blindly \
+-- a true value here triggers a mandatory rewrite, so getting it right \
+the first time is faster than being caught by the retry.
 """
 
 _LANGUAGE_NAMES = {"en": "English", "es": "Spanish", "pt": "Portuguese"}

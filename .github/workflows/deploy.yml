@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "gateway/**"
+      - "app/**"
       - ".github/workflows/deploy.yml"
 
 env:
@@ -13,6 +14,7 @@ env:
   REGISTRY: us-central1-docker.pkg.dev
   REPO: quasar-sage
   SERVICE: quasar-sage-gateway
+  APP_SERVICE: quasar-sage-app
   WIF_PROVIDER: projects/250103471198/locations/global/workloadIdentityPools/quasar-sage-github-pool/providers/quasar-sage-github-provider
   WIF_SA: quasar-sage-github-actions@quasar-business-sage.iam.gserviceaccount.com
 
@@ -79,5 +81,38 @@ jobs:
       - name: Get Gateway URL
         run: |
           gcloud run services describe ${{ env.SERVICE }} \
+            --region=${{ env.REGION }} \
+            --format="value(status.url)"
+
+      # ---- Standalone app (Quasar Sage's own product surface) ----
+      - name: Build App image
+        run: |
+          docker build \
+            -t ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/app:${{ github.sha }} \
+            -t ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/app:latest \
+            app
+
+      - name: Push App image
+        run: |
+          docker push ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/app:${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/app:latest
+
+      - name: Deploy App to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.APP_SERVICE }} \
+            --image=${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/app:${{ github.sha }} \
+            --region=${{ env.REGION }} \
+            --platform=managed \
+            --allow-unauthenticated \
+            --port=8080 \
+            --min-instances=0 \
+            --max-instances=5 \
+            --memory=512Mi \
+            --set-env-vars="SAGE_GATEWAY_URL=https://quasar-sage-gateway-lnexpzgv5a-uc.a.run.app" \
+            --set-secrets="SAGE_DEMO_TENANT_KEY=sage-demo-tenant-key:latest"
+
+      - name: Get App URL
+        run: |
+          gcloud run services describe ${{ env.APP_SERVICE }} \
             --region=${{ env.REGION }} \
             --format="value(status.url)"

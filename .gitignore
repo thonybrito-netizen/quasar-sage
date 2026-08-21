@@ -11,3 +11,6 @@ widget/dist/
 .DS_Store
 *.log
 load/*.html
+.next/
+app/tsconfig.tsbuildinfo
+app/next-env.d.ts

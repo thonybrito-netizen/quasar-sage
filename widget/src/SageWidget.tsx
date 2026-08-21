@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { MODULE_THEME, SAGE_BG, SAGE_BORDER, SAGE_SURFACE, SAGE_TEXT, SAGE_TEXT_MUTED } from "./theme";
 import { useSageCompletion } from "./useSageCompletion";
+import { NegotiatorPrepSheet, type NegotiatorPrep } from "./NegotiatorPrepSheet";
+import { LockerRoomOkrGate, type OkrKillCriteria } from "./LockerRoomOkrGate";
 import type { DealmakerMode, ModuleId, SageLanguage } from "./types";
 
 const MODULE_ORDER: ModuleId[] = ["visionary", "storyteller", "dealmaker", "negotiator", "locker_room"];
@@ -30,19 +32,46 @@ export function SageWidget({
   const [open, setOpen] = useState(false);
   const [activeModule, setActiveModule] = useState<ModuleId>("visionary");
   const [userMessage, setUserMessage] = useState("");
+  const [negotiatorPrep, setNegotiatorPrep] = useState<NegotiatorPrep | null>(null);
+  const [lockerRoomOkr, setLockerRoomOkr] = useState<OkrKillCriteria | null>(null);
   const { run, loading, error, result } = useSageCompletion({ endpoint });
 
   const theme = MODULE_THEME[activeModule];
 
+  // Section 2.4.3 / 2.5.3: Negotiator and Locker Room each gate the chat
+  // input behind a structured form until their module-specific
+  // prerequisite exists (Walk-Away Ledger; Kill Criteria) -- once
+  // completed, those values ride along in every request's context so the
+  // Gateway's own validation (which independently refuses to proceed
+  // without them) always has them too.
+  const gateBlocking =
+    (activeModule === "negotiator" && !negotiatorPrep) || (activeModule === "locker_room" && !lockerRoomOkr);
+
+  const extraContext: Record<string, unknown> =
+    activeModule === "negotiator" && negotiatorPrep
+      ? {
+          counterpart_position: negotiatorPrep.position,
+          counterpart_interest: negotiatorPrep.interest,
+          walk_away_value: negotiatorPrep.batna,
+          plausible_range: negotiatorPrep.range,
+        }
+      : activeModule === "locker_room" && lockerRoomOkr
+        ? {
+            kill_criteria_metric: lockerRoomOkr.metric,
+            kill_criteria_target: lockerRoomOkr.target,
+            kill_criteria_window: lockerRoomOkr.window,
+          }
+        : {};
+
   const handleSubmit = async () => {
-    if (!userMessage.trim() || loading) return;
+    if (!userMessage.trim() || loading || gateBlocking) return;
     try {
       await run({
         module: activeModule,
         mode: activeModule === "dealmaker" ? dealmakerMode : null,
         language,
         userMessage,
-        context: initialContext,
+        context: { ...initialContext, ...extraContext },
       });
     } catch {
       // error state already surfaced via the hook
@@ -130,6 +159,44 @@ export function SageWidget({
               </p>
             )}
 
+            {theme.live && activeModule === "negotiator" && !negotiatorPrep && (
+              <NegotiatorPrepSheet onComplete={setNegotiatorPrep} />
+            )}
+            {theme.live && activeModule === "negotiator" && negotiatorPrep && (
+              <div
+                style={{
+                  fontSize: 11,
+                  color: SAGE_TEXT_MUTED,
+                  border: `1px solid ${SAGE_BORDER}`,
+                  borderRadius: 8,
+                  padding: 8,
+                  marginBottom: 12,
+                }}
+              >
+                <strong style={{ color: theme.color }}>Walk-Away Ledger:</strong> BATNA{" "}
+                {negotiatorPrep.batna}, range {negotiatorPrep.range}
+              </div>
+            )}
+
+            {theme.live && activeModule === "locker_room" && !lockerRoomOkr && (
+              <LockerRoomOkrGate onComplete={setLockerRoomOkr} />
+            )}
+            {theme.live && activeModule === "locker_room" && lockerRoomOkr && (
+              <div
+                style={{
+                  fontSize: 11,
+                  color: SAGE_TEXT_MUTED,
+                  border: `1px solid ${SAGE_BORDER}`,
+                  borderRadius: 8,
+                  padding: 8,
+                  marginBottom: 12,
+                }}
+              >
+                <strong style={{ color: theme.color }}>Kill Criteria:</strong> {lockerRoomOkr.target}{" "}
+                {lockerRoomOkr.metric} in {lockerRoomOkr.window}
+              </div>
+            )}
+
             {result && (
               <div style={{ marginBottom: 16, fontSize: 13, lineHeight: 1.5 }}>
                 <div style={{ color: theme.color, fontWeight: 600, marginBottom: 4 }}>Strategic critique</div>
@@ -162,8 +229,14 @@ export function SageWidget({
             <textarea
               value={userMessage}
               onChange={(e) => setUserMessage(e.target.value)}
-              placeholder={theme.live ? `Ask the ${theme.label}...` : "This module isn't live yet"}
-              disabled={!theme.live}
+              placeholder={
+                !theme.live
+                  ? "This module isn't live yet"
+                  : gateBlocking
+                    ? "Complete the form above first"
+                    : `Ask the ${theme.label}...`
+              }
+              disabled={!theme.live || gateBlocking}
               rows={2}
               style={{
                 flex: 1,
@@ -178,15 +251,15 @@ export function SageWidget({
             />
             <button
               onClick={handleSubmit}
-              disabled={!theme.live || loading || !userMessage.trim()}
+              disabled={!theme.live || gateBlocking || loading || !userMessage.trim()}
               style={{
                 borderRadius: 8,
                 border: "none",
-                background: theme.live ? theme.color : SAGE_BORDER,
+                background: theme.live && !gateBlocking ? theme.color : SAGE_BORDER,
                 color: SAGE_BG,
                 fontWeight: 700,
                 padding: "0 14px",
-                cursor: theme.live ? "pointer" : "not-allowed",
+                cursor: theme.live && !gateBlocking ? "pointer" : "not-allowed",
               }}
             >
               {loading ? "..." : "Send"}

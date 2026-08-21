@@ -75,9 +75,23 @@ class ValidationFailure(Exception):
         super().__init__(message)
 
 
+_CODE_FENCE_RE = re.compile(r"^\s*```(?:json)?\s*\n?(.*?)\n?```\s*$", re.DOTALL)
+
+
+def _strip_code_fence(raw_text: str) -> str:
+    """Despite RESPONSE_SCHEMA_INSTRUCTIONS saying "nothing else", Claude
+    sometimes wraps the JSON in a markdown code fence anyway (observed in
+    production even with a plain single-object response) -- strip it
+    before parsing rather than failing type_validation and burning an
+    Invisible Retry on pure formatting. If there's no fence, this is a
+    no-op."""
+    match = _CODE_FENCE_RE.match(raw_text)
+    return match.group(1) if match else raw_text
+
+
 def _type_validate(raw_text: str) -> dict:
     try:
-        data = json.loads(raw_text)
+        data = json.loads(_strip_code_fence(raw_text))
     except json.JSONDecodeError as exc:
         raise ValidationFailure("type_validation", f"Response was not valid JSON: {exc}") from exc
 
@@ -188,7 +202,20 @@ def _call_model(system_prompt: str, user_content: str) -> str:
     client = get_client()
     response = client.messages.create(
         model=settings.chat_model_id,
-        max_tokens=1500,
+        max_tokens=4096,
+        # Extended thinking is on by default for this model and was
+        # silently eating a large, variable share of max_tokens (observed
+        # 950+ tokens of a 1500 budget) before the visible JSON answer
+        # even started -- with vanity_metric_audit added to the response
+        # schema, that regularly left too little room to finish the JSON,
+        # so every attempt hit stop_reason="max_tokens" mid-object and
+        # failed type_validation, exhausting all retries into a graceful
+        # fallback that should have been a normal answer. Structured JSON
+        # extraction doesn't need visible reasoning tokens; disabling
+        # thinking removes this whole failure class and is faster/cheaper
+        # besides. max_tokens bumped from 1500 to 4096 as a second,
+        # independent safety margin now that all of it goes to the answer.
+        thinking={"type": "disabled"},
         system=system_prompt,
         messages=[{"role": "user", "content": user_content}],
     )

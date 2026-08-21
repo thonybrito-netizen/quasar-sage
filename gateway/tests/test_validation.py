@@ -86,6 +86,17 @@ def test_first_attempt_success(fake_claude):
     assert result.generated_content
 
 
+def test_markdown_code_fence_is_stripped_before_parsing(fake_claude):
+    # Regression test: observed in production (Claude sometimes wraps the
+    # JSON in ```json ... ``` despite being told not to) -- this used to
+    # burn every retry on a pure formatting issue and fall back.
+    fenced = "```json\n" + VALID_RESPONSE + "\n```"
+    fake_claude([fenced])
+    result = generate_completion(VisionaryModule(), _request())
+    assert result.resolved_via == "first_attempt"
+    assert result.generated_content
+
+
 def test_invisible_retry_on_bad_json_then_succeeds(fake_claude):
     fake_claude([NOT_JSON_RESPONSE, VALID_RESPONSE])
     result = generate_completion(VisionaryModule(), _request())

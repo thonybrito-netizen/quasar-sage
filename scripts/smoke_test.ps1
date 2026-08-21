@@ -35,14 +35,12 @@ Check "GET /health" {
     if ($r.status -ne "ok") { throw "unexpected body: $($r | ConvertTo-Json -Compress)" }
 }
 
-Check "GET /v1/modules lists all five, Visionary+Storyteller live" {
+Check "GET /v1/modules lists all five, all live" {
     $r = Invoke-RestMethod -Uri "$GatewayUrl/v1/modules" -Headers @{ Authorization = "Bearer $ApiKey" }
     if ($r.Count -ne 5) { throw "expected 5 modules, got $($r.Count)" }
-    $byId = @{}
-    foreach ($m in $r) { $byId[$m.module_id] = $m }
-    if (-not $byId["visionary"].live) { throw "visionary should be live" }
-    if (-not $byId["storyteller"].live) { throw "storyteller should be live" }
-    if ($byId["dealmaker"].live) { throw "dealmaker should not be live yet" }
+    foreach ($m in $r) {
+        if (-not $m.live) { throw "$($m.module_id) should be live" }
+    }
 }
 
 Check "POST /v1/completions rejects a bad key with 401" {
@@ -56,12 +54,22 @@ Check "POST /v1/completions rejects a bad key with 401" {
     }
 }
 
-foreach ($module in @("visionary", "storyteller")) {
-    Check "POST /v1/completions ($module)" {
-        $body = @{ module = $module; user_message = "Give me a sample response for a smoke test."; context = @{ enemy = "legacy tooling" } } | ConvertTo-Json
+$moduleChecks = @(
+    @{ module = "visionary"; context = @{ enemy = "legacy tooling" } },
+    @{ module = "storyteller"; context = @{ enemy = "legacy tooling" } },
+    @{ module = "dealmaker"; mode = "enterprise"; context = @{ deal_value = 50000 } },
+    @{ module = "negotiator"; context = @{ walk_away_value = 50000 } },
+    @{ module = "locker_room"; context = @{ kill_criteria_target = "20 new orders in 30 days" } }
+)
+
+foreach ($mc in $moduleChecks) {
+    Check "POST /v1/completions ($($mc.module)$(if ($mc.mode) { " / $($mc.mode)" }))" {
+        $payload = @{ module = $mc.module; user_message = "Give me a sample response for a smoke test."; context = $mc.context }
+        if ($mc.mode) { $payload.mode = $mc.mode }
+        $body = $payload | ConvertTo-Json
         $r = Invoke-RestMethod -Uri "$GatewayUrl/v1/completions" -Method Post `
             -Headers @{ Authorization = "Bearer $ApiKey" } -ContentType "application/json" -Body $body
-        if ($r.module -ne $module) { throw "module mismatch: $($r.module)" }
+        if ($r.module -ne $mc.module) { throw "module mismatch: $($r.module)" }
         if ($r.resolved_via -eq "graceful_fallback" -and $r.strategic_critique -like "*no model backend configured*") {
             Write-Host "        (no ANTHROPIC_API_KEY set yet -- clean fallback confirmed, not a real generation)" -ForegroundColor Yellow
         } elseif (-not $r.generated_content) {
@@ -70,14 +78,6 @@ foreach ($module in @("visionary", "storyteller")) {
             Write-Host "        real completion received (resolved_via=$($r.resolved_via))" -ForegroundColor Cyan
         }
     }
-}
-
-Check "POST /v1/completions (dealmaker stub never calls Claude)" {
-    $body = @{ module = "dealmaker"; mode = "enterprise"; user_message = "test"; context = @{} } | ConvertTo-Json
-    $r = Invoke-RestMethod -Uri "$GatewayUrl/v1/completions" -Method Post `
-        -Headers @{ Authorization = "Bearer $ApiKey" } -ContentType "application/json" -Body $body
-    if ($r.resolved_via -ne "graceful_fallback") { throw "expected graceful_fallback, got $($r.resolved_via)" }
-    if ($r.generated_content) { throw "stub module should never generate content" }
 }
 
 Write-Host ""

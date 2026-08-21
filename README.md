@@ -5,19 +5,24 @@ QuietNoise and Lorito. This repo is the API Gateway (`gateway/`) and the
 embeddable widget UI (`widget/`) described in the master spec's Sections 3
 and 7.5.
 
-**Launch scope (Aug 22):** Visionary and Storyteller are live (real Claude
-calls). Dealmaker, Negotiator, and Locker Room are scaffolded — correct API
-shape, deterministic "not yet enabled" response, no generation. See
-`gateway/app/modules/` for each module's system prompt and
-`C:\Users\totob\.claude\plans\synthetic-dazzling-piglet.md` for the full
-sprint plan and everything explicitly deferred past launch.
+**Launch scope (Aug 22):** all 5 modules are live (real Claude calls) --
+Visionary, Storyteller, Dealmaker (Enterprise + Retail), Negotiator, and
+Locker Room. See `gateway/app/modules/` for each module's system prompt
+and `C:\Users\totob\.claude\plans\synthetic-dazzling-piglet.md` for the
+original sprint plan. Negotiator and Locker Room each gate their chat
+input behind a structured form (`widget/src/NegotiatorPrepSheet.tsx`,
+`widget/src/LockerRoomOkrGate.tsx`) per spec Sections 2.4.3/2.5.3.
 
 **Live:** `https://quasar-sage-gateway-lnexpzgv5a-uc.a.run.app` (GCP
 project `quasar-business-sage`, deployed via `.github/workflows/deploy.yml`
-on every push to `main`). Verified end-to-end with real Claude output for
-both live modules via `scripts/smoke_test.ps1` -- see git history for two
-real bugs that only showed up in production (a trailing-newline secret and
-a gunicorn worker timeout, both fixed).
+on every push to `main`), and embedded in both host apps at
+`https://quietnoise.me` and `https://lorito.net`. Verified end-to-end with
+real Claude output for all 5 modules via `scripts/smoke_test.ps1` and a
+real Locust run (`load/`) -- see git history for the real bugs that only
+showed up in production (a trailing-newline secret, a gunicorn worker
+timeout, extended-thinking silently eating the token budget, and Claude
+occasionally wrapping JSON in a markdown fence -- all fixed, each with a
+regression test).
 
 ## Gateway (`gateway/`)
 
@@ -52,6 +57,16 @@ real key works once you drop it into `.env` is to re-run this script.
 The embeddable Sage UI, mounted into both QuietNoise and Lorito. See
 `widget/README.md` for the integration contract both apps follow.
 
+## Load testing (`load/`)
+
+`load/locustfile.py` simulates concurrent users across all three real
+entry points (QuietNoise's proxy, Lorito's backend, the Gateway directly)
+at once, weighted to approximate real traffic distribution across the 5
+modules. Read its docstring before running -- every request is a real,
+billed Anthropic API call, and there's a cost/rate-limit warning worth
+reading before running at full scale (e.g. 100 concurrent users). See
+`load/README.md` for a quick start.
+
 ## Deploy (`gateway/`, GCP project `quasar-business-sage`)
 
 `.github/workflows/deploy.yml` builds and deploys the Gateway to Cloud Run
@@ -80,9 +95,9 @@ WIF-based deploy.yml.
 `WIF_PROVIDER`/`WIF_SA` in `deploy.yml` are filled in with real values --
 push to `main` now actually deploys.
 
-The matching real tenant keys still need to land in QuietNoise's
-`SAGE_API_KEY` secret and Lorito's `QUASAR_SAGE_API_KEY` secret once the
-Gateway's live URL is known (see each repo's PR checklist).
+The matching real tenant keys are live in QuietNoise's `SAGE_API_KEY`
+secret and Lorito's `QUASAR_SAGE_API_KEY` secret (both projects, real
+values, correct IAM bindings verified 2026-08-19/20).
 
 **Vertex fallback (optional):** if you'd rather not hold a raw Anthropic
 API key in Secret Manager long-term, `VERTEX_PROJECT_ID` is the fallback

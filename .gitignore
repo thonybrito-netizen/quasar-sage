@@ -10,3 +10,4 @@ node_modules/
 widget/dist/
 .DS_Store
 *.log
+load/*.html
